@@ -1,0 +1,20 @@
+{
+  "name": "cal-dev-agent-plugin",
+  "owner": {
+    "name": "Appfabriek",
+    "url": "https://github.com/appfabriek"
+  },
+  "metadata": {
+    "description": "C/AL development toolkit for BC14, NAV, and classic Navision"
+  },
+  "plugins": [
+    {
+      "name": "cal-dev-agent-plugin",
+      "source": "./",
+      "description": "C/AL development toolkit: export/import objects, git management, code review, deployment, and migration patterns for BC14, NAV 2009-2018, and classic Navision.",
+      "version": "1.0.0",
+      "homepage": "https://github.com/appfabriek/cal-dev-agent-plugin",
+      "repository": "https://github.com/appfabriek/cal-dev-agent-plugin"
+    }
+  ]
+}
