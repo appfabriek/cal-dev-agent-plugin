@@ -28,11 +28,13 @@ Deze plugin is complementair aan de [bc-dev-agent-plugin](https://github.com/app
 
 ---
 
-## Skills (5 commands)
+## Skills (7 commands)
 
 | Commando | Doel |
 |----------|------|
-| `/cal-export [filter]` | Exporteer C/AL objecten uit de database naar `.txt` bestanden |
+| `/cal-init <database>` | Nieuw project opstarten: instance aanmaken, structuur aanleggen, initiële export |
+| `/cal-pull` | Haal laatste code op uit database — voor klanten die wijzigingen in DB laten staan |
+| `/cal-export [filter]` | Exporteer specifieke C/AL objecten uit de database naar `.txt` bestanden |
 | `/cal-import [bestand]` | Importeer en compileer C/AL objecten in de database |
 | `/cal-git [actie]` | Git-beheer: exporteren voor commit, diffs, merge-conflicten |
 | `/cal-review [object]` | Review C/AL code op kwaliteit, correctheid en valkuilen |
@@ -67,7 +69,9 @@ Deze plugin is complementair aan de [bc-dev-agent-plugin](https://github.com/app
 ## Workflow
 
 ```
-1. /cal-export gewijzigd     ← haal objecten op uit DB
+0. /cal-init <database>      ← eenmalig: project aanmaken + eerste export
+   (daarna regelmatig:)
+1. /cal-pull                 ← haal laatste code op uit DB (klanten wijzigen vaak direct)
 2. Bewerk in teksteditor
 3. /cal-review               ← controleer vóór import
 4. /cal-import               ← compileer in DB

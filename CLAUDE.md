@@ -65,12 +65,14 @@ Wanneer de gebruiker dit vraagt — lees `cal-tools.md` en handel direct:
 
 | Vraag | Actie |
 |-------|-------|
-| "exporteer object X" of "haal codeunit Y op" | `Export-NAVApplicationObject` via runner |
-| "wat zit er in de database?" | `Get-NAVApplicationObject` via runner |
-| "importeer deze wijziging" | `Import-NAVApplicationObject` via runner |
+| "nieuw project opstarten" of "database initialiseren" | `/cal-init` — instance aanmaken, structuur, export |
+| "haal laatste code op" of "sync met database" | `/cal-pull` — Modified=Yes objecten exporteren |
+| "exporteer object X" of "haal codeunit Y op" | `Export-NAVApplicationObject` via NavAdminTool |
+| "wat zit er in de database?" | `Get-NAVApplicationObjectProperty` + export |
+| "importeer deze wijziging" | `Import-NAVApplicationObject` via NavAdminTool |
 | "wat zijn de verschillen met productie?" | Export beide → git diff |
 | "compileer object X" | Import met SynchronizeSchemaChanges |
-| "welke versie van object X draait?" | `Get-NAVApplicationObjectProperty` via runner |
+| "welke versie van object X draait?" | `Get-NAVApplicationObjectProperty` |
 
 ## Development Workflow
 
@@ -93,11 +95,13 @@ Voorbeelden:
 
 Object type afkortingen: `TAB` (Table), `COD` (Codeunit), `PAG` (Page), `REP` (Report), `XML` (XMLport), `QUE` (Query), `MEN` (MenuSuite), `DAT` (Dataport — oud)
 
-## Available Commands (5)
+## Available Commands (7)
 
 | Command | Purpose |
 |---------|---------|
-| `/cal-export` | Exporteer C/AL objecten uit de database naar tekst |
+| `/cal-init` | Nieuw project: instance aanmaken, structuur, initiële export + CLAUDE.md |
+| `/cal-pull` | Sync database → git: exporteer Modified=Yes objecten, toon diff |
+| `/cal-export` | Exporteer specifieke C/AL objecten uit de database naar tekst |
 | `/cal-import` | Importeer en compileer C/AL objecten in de database |
 | `/cal-git` | Git-beheer voor C/AL: export-strategie, diffs, merges |
 | `/cal-review` | Review C/AL code op kwaliteit, patronen en valkuilen |
