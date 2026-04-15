@@ -93,41 +93,40 @@ Get-WinEvent -LogName 'Application' -MaxEvents 20 |
     Sort-Object TimeCreated -Descending | Select-Object -First 5
 ```
 
-**Veelvoorkomende opstartfouten:**
+**Veelvoorkomende opstartfouten en oplossingen:**
 
-| Fout | Oorzaak | Oplossing |
-|------|---------|-----------|
-| "database te recent" | DB gemaakt met nieuwere build | Patch `databaseversionno` (zie Stap 4) |
-| "in the middle of a restore" | NORECOVERY restore onderbroken | `RESTORE DATABASE [naam] WITH RECOVERY` |
-| "port already registered" | Poortconflict | Andere poorten kiezen in Stap 2 |
-| "cannot start the service" | Zie Event Log | Zie Event Log voor specifieke fout |
+| Fout in Event Log | Oorzaak | Oplossing |
+|-------------------|---------|-----------|
+| "database te recent" / "too recent" | DB gemaakt met iets nieuwere build | Zie hieronder: patch `databaseversionno` |
+| "in the middle of a restore" | NORECOVERY restore onderbroken | `RESTORE DATABASE [naam] WITH RECOVERY` via sqlcmd |
+| "port already registered" | Poortconflict met andere instance | Andere poorten kiezen in Stap 2, opnieuw starten |
+| "cannot start the service" | Zie Event Log voor detail | Lees de volledige Event Log entry |
 
-### Stap 4 — Patch versieveld als build mismatch (indien nodig)
-
-Als de fout is "database is too recent / te recent":
+**Alleen bij fout "database te recent":** vergelijk het versieverschil en patch indien het klein is (zelfde major versie, andere CU-build):
 
 ```powershell
-# Lees versie van werkende BC database op dezelfde server
-$refVersion = sqlcmd -S $dbServer -E -No -Q `
-    "SELECT databaseversionno, applicationversion FROM [BC_Migration_DB].[dbo].[\$ndo\$dbproperty]"
+# Lees versie van een werkende BC-database op dezelfde server als referentie
+# Via sqlcmd met script file (vermijdt $ escaping problemen)
+$script = "SELECT databaseversionno, applicationversion FROM [dbo].[$" + "ndo$" + "dbproperty]"
 
-# Lees versie van doeldatabase
-$targetVersion = sqlcmd -S $dbServer -E -No -Q `
-    "SELECT databaseversionno, applicationversion FROM [$dbName].[dbo].[\$ndo\$dbproperty]"
+# Referentie: werkende database
+$ref = sqlcmd -S $dbServer -d '<werkende-db>' -E -No -Q $script
+
+# Doel: de te initialiseren database
+$target = sqlcmd -S $dbServer -d $dbName -E -No -Q $script
 ```
 
-Als het verschil slechts 1–5 versienummers is (kleine build-difference, niet een major upgrade):
+Verschil van 1–5 in `databaseversionno` en zelfde major versie → patch is veilig:
 ```sql
--- Patch via SQL script file (vermijd $ escaping problemen op command line)
--- Script inhoud:
+-- Sla op als .sql bestand, voer uit via sqlcmd -i
 UPDATE [dbo].[$ndo$dbproperty]
 SET databaseversionno = <referentie-waarde>,
     applicationversion = '<referentie-versie>'
 ```
 
-> **Let op:** Patch alleen bij minimaal verschil (zelfde major versie, andere build). Nooit bij major versie upgrades (bijv. NAV2018 → BC14).
+> Nooit patchen bij major versie-upgrades (bijv. NAV2018 → BC14) — dan is een database-conversie nodig.
 
-### Stap 5 — Start de instance en importeer licentie
+### Stap 4 — Start de instance en importeer licentie
 
 ```powershell
 # Start service
@@ -150,7 +149,7 @@ Licentie zoeken als niet opgegeven:
 find ~/repos -name "dev.flf" -o -name "*.flf" 2>/dev/null | grep -v Cronus | head -5
 ```
 
-### Stap 6 — Maak projectstructuur aan
+### Stap 5 — Maak projectstructuur aan
 
 ```bash
 mkdir -p <projectpad>/{objects,reports,scripts}
@@ -166,7 +165,7 @@ export_temp/
 EOF
 ```
 
-### Stap 7 — Exporteer alle custom objecten
+### Stap 6 — Exporteer alle custom objecten
 
 ```powershell
 Import-Module $modelTools.FullName -WarningAction SilentlyContinue
@@ -214,7 +213,7 @@ foreach ($file in Get-ChildItem $tmpDir -Filter '*.txt') {
 Remove-Item $tmpAll, $tmpDir -Recurse -Force
 ```
 
-### Stap 8 — Maak CLAUDE.md aan
+### Stap 7 — Maak CLAUDE.md aan
 
 Maak `CLAUDE.md` in de projectmap met:
 
@@ -251,7 +250,7 @@ Maak `CLAUDE.md` in de projectmap met:
 7. `/cal-deploy` — deploy naar andere omgevingen
 ```
 
-### Stap 9 — Initieel commit
+### Stap 8 — Initieel commit
 
 ```bash
 cd <projectpad>
