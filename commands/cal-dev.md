@@ -328,7 +328,7 @@ $licFile       = 'D:\repos\plants\license\BC14_DEV_NL.flf'  # VEREIST - zie pitf
 # BC13:        Get-BcArtifactUrl -type OnPrem -version '13' -country nl
 # NAV 2018:    Get-BcArtifactUrl -type OnPrem -version '11' -country nl
 # NAV 2017:    Get-BcArtifactUrl -type OnPrem -version '10' -country nl
-# NAV 2016:    Get-BcArtifactUrl -type OnPrem -version '9'  -country nl
+# NAV 2016:    Get-BcArtifactUrl -type OnPrem -version '9'  -country nl  ← container start OK maar finsql.exe v9 hangt (GUI vereist)
 # NAV 2013/R2: NIET BESCHIKBAAR als Docker artifact
 
 $artifactUrl = Get-BcArtifactUrl -type OnPrem -version '14' -country nl
@@ -350,11 +350,17 @@ New-BcContainer `
 
 **Container naam max 15 tekens** (BcContainerHelper geeft waarschuwing bij overschrijding).
 
-> **Versie-ondersteuning (getest):**
-> - BC14 ✓ (v14.x) — BC14 developer licentie vereist
-> - BC13 ✓ (v13.x) — BC14 developer licentie vereist
-> - NAV 2018 (v11), NAV 2017 (v10), NAV 2016 (v9) — CRONUS demo licentie verlopen + BC14 licentie NIET compatibel → vereist versie-specifieke NAV licentie
-> - NAV 2013/R2 — **NIET beschikbaar** als Docker artifact
+> **Versie-ondersteuning (volledig getest):**
+> | Versie | Docker | Import/compile | Licentie |
+> |--------|--------|---------------|---------|
+> | BC14 (v14.x) | ✓ | ✓ | BC14 developer .flf |
+> | BC13 (v13.x) | ✓ | ✓ | BC14 developer .flf |
+> | NAV 2018 (v11.x) | ✓ | ✓ | Versie-specifieke .flf (waarschuwing bij BC14 .flf, werkt wel) |
+> | NAV 2017 (v10.x) | ✓ | ✓ | Versie-specifieke .flf (waarschuwing bij BC14 .flf, werkt wel) |
+> | NAV 2016 (v9.x) | ✓ container | ✗ finsql hangt | finsql.exe v9 vereist GUI-desktop — niet headless bruikbaar in Server Core containers |
+> | NAV 2013/R2 | ✗ geen artifact | ✗ | Niet beschikbaar als Docker artifact |
+>
+> **NAV 2016 (v9) workaround:** gebruik een bare-metal of VM installatie, geen Docker.
 
 ### Stap B — License vervangen (alleen indien NODIG)
 
@@ -533,6 +539,8 @@ Gebruik altijd `Get-ChildItem -Recurse` om paden te zoeken (versie-onafhankelijk
 9. **Object Type nummers** — In de SQL Object tabel: Type 0=Table, Type 5=Codeunit (niet Type 4 zoals je verwacht). Controleer altijd met `SELECT [Type], [Name] FROM [Object] WHERE [Name]='bekende naam'` om de lokale type-mapping te verifiëren.
 
 10. **Container naam max 15 tekens** — BcContainerHelper geeft waarschuwing maar maakt de container wel aan. Houd namen kort.
+
+11. **finsql.exe v9 (NAV 2016) hangt altijd in headless containers** — Zelfs zonder argumenten opent finsql.exe v9 een GUI-loginvenster en wacht op input. Windows Server Core containers hebben geen desktop. Dit is een fundamentele beperking van v9: gebruik voor NAV 2016 een VM of bare-metal installatie. Versies v10+ (NAV 2017+) zijn wél headless-compatible.
 
 ---
 

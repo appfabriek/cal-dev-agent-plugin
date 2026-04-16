@@ -106,10 +106,12 @@ New-BcContainer -accept_eula -accept_outdated -containerName $containerName `
     -isolation hyperv -memoryLimit '4G' -licenseFile 'D:\repos\plants\license\BC14_DEV_NL.flf'
 ```
 
-**Beschikbare versies als Docker artifact:**
-- BC14 (14.x) — volledig getest ✓ (BC14 developer licentie vereist)
-- BC13 (13.x) — volledig getest ✓ (BC14 developer licentie vereist)
-- NAV 2018 (11.x), NAV 2017 (10.x), NAV 2016 (9.x) — CRONUS demo licentie verlopen + BC14 licentie NIET compatibel → vereist versie-specifieke NAV licentie
+**Versie-ondersteuning Docker (volledig getest):**
+- BC14 (14.x) ✓ — BC14 developer licentie
+- BC13 (13.x) ✓ — BC14 developer licentie
+- NAV 2018 (11.x) ✓ — versie-specifieke licentie (BC14 .flf werkt met waarschuwing)
+- NAV 2017 (10.x) ✓ — versie-specifieke licentie (BC14 .flf werkt met waarschuwing)
+- NAV 2016 (9.x) ✗ — container start wel, maar finsql.exe v9 vereist GUI-desktop; hangt altijd in headless Server Core container → gebruik VM
 - NAV 2013/R2 — NIET beschikbaar als Docker artifact
 
 **Kritieke valkuilen Docker:**

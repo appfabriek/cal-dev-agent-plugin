@@ -1,6 +1,6 @@
 {
   "name": "cal-dev-agent-plugin",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "C/AL development toolkit for BC14, NAV, and classic Navision: export/import objects, git management, code review, deployment, and migration patterns.",
   "author": {
     "name": "Appfabriek"
