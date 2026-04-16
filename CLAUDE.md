@@ -107,9 +107,9 @@ New-BcContainer -accept_eula -accept_outdated -containerName $containerName `
 ```
 
 **Beschikbare versies als Docker artifact:**
-- BC14 (14.x) — volledig getest ✓
-- BC13 (13.x) — getest ✓
-- NAV 2018 (11.x), NAV 2017 (10.x), NAV 2016 (9.x) — demo licentie verlopen, gebruik altijd `-licenseFile`
+- BC14 (14.x) — volledig getest ✓ (BC14 developer licentie vereist)
+- BC13 (13.x) — volledig getest ✓ (BC14 developer licentie vereist)
+- NAV 2018 (11.x), NAV 2017 (10.x), NAV 2016 (9.x) — CRONUS demo licentie verlopen + BC14 licentie NIET compatibel → vereist versie-specifieke NAV licentie
 - NAV 2013/R2 — NIET beschikbaar als Docker artifact
 
 **Kritieke valkuilen Docker:**

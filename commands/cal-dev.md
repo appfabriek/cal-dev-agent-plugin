@@ -328,15 +328,24 @@ New-BcContainer `
     -updateHosts `
     -memoryLimit    '4G' `
     -isolation      hyperv `
-    -licenseFile    '' `
+    -licenseFile    $licFile `
     -enableTaskScheduler:$false
 ```
 
 **Container naam max 15 tekens** (BcContainerHelper geeft waarschuwing bij overschrijding).
 
-### Stap B — License vervangen (VERPLICHT)
+> **Versie-ondersteuning (getest):**
+> - BC14 ✓ (v14.x) — BC14 developer licentie vereist
+> - BC13 ✓ (v13.x) — BC14 developer licentie vereist
+> - NAV 2018 (v11), NAV 2017 (v10), NAV 2016 (v9) — CRONUS demo licentie verlopen + BC14 licentie NIET compatibel → vereist versie-specifieke NAV licentie
+> - NAV 2013/R2 — **NIET beschikbaar** als Docker artifact
 
-BcContainerHelper containers gebruiken standaard de CRONUS demo licentie (7 KB). Deze licentie **ontbreekt "File, Import, Text" systeem-permissie** — import van objecten mislukt met fout `[18023703]`.
+### Stap B — License vervangen (alleen indien NODIG)
+
+Als je `-licenseFile $licFile` hebt doorgegeven bij `New-BcContainer` (aanbevolen), importeert BcContainerHelper de licentie al tijdens container-initialisatie — je kunt Stap B overslaan.
+
+**Stap B is alleen nodig als de container aangemaakt is zonder `-licenseFile`.**
+BcContainerHelper containers zonder licentie gebruiken de CRONUS demo licentie (7 KB). Deze licentie **ontbreekt "File, Import, Text" systeem-permissie** — import van objecten mislukt met fout `[18023703]`.
 
 ```powershell
 # Vervang CRONUS demo licentie door echte developer licentie
@@ -477,15 +486,15 @@ Invoke-ScriptInBcContainer -containerName $containerName -scriptblock {
 
 ### Container versie-specifieke paden
 
-Gebruik altijd `Get-ChildItem -Recurse` om paden te zoeken (versie-onafhankelijk):
+Gebruik altijd `Get-ChildItem -Recurse` om paden te zoeken (versie-onafhankelijk). Onderstaande paden zijn **exact getest**:
 
-| Versie | NAV versienummer | Service base pad |
-|--------|-----------------|-----------------|
-| BC14 | 14.x | `C:\Program Files\Microsoft Dynamics NAV\140\Service\` |
-| BC13 | 13.x | `C:\Program Files\Microsoft Dynamics 365 Business Central\130\Service\` |
-| NAV 2018 (v11) | 11.x | `C:\Program Files\Microsoft Dynamics NAV\110\Service\` |
-| NAV 2017 (v10) | 10.x | `C:\Program Files\Microsoft Dynamics NAV\100\Service\` |
-| NAV 2016 (v9) | 9.x | `C:\Program Files\Microsoft Dynamics NAV\90\Service\` |
+| Versie | finsql.exe (getest) | Service base |
+|--------|---------------------|--------------|
+| BC14 ✓ | `C:\Program Files (x86)\Microsoft Dynamics NAV\140\RoleTailored Client\finsql.exe` | `C:\Program Files\Microsoft Dynamics NAV\140\Service\` |
+| BC13 ✓ | `C:\Program Files (x86)\Microsoft Dynamics NAV\130\RoleTailored Client\finsql.exe` | `C:\Program Files\Microsoft Dynamics NAV\130\Service\` |
+| NAV 2018 (v11) | `C:\Program Files (x86)\Microsoft Dynamics NAV\110\RoleTailored Client\finsql.exe` | `C:\Program Files\Microsoft Dynamics NAV\110\Service\` |
+| NAV 2017 (v10) | `C:\Program Files (x86)\Microsoft Dynamics NAV\100\RoleTailored Client\finsql.exe` | `C:\Program Files\Microsoft Dynamics NAV\100\Service\` |
+| NAV 2016 (v9) | `C:\Program Files (x86)\Microsoft Dynamics NAV\90\RoleTailored Client\finsql.exe` | `C:\Program Files\Microsoft Dynamics NAV\90\Service\` |
 
 ### Docker Container Pitfalls
 
