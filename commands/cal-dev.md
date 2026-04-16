@@ -295,7 +295,23 @@ Git: objects/COD50000 - MijnCodeunit.txt (commit abc1234)
 
 Gebruik dit scenario als **er geen bestaande BC/NAV omgeving beschikbaar is** die overeenkomt met de doelversie, of als de bestaande omgeving te ver afwijkt om op te compileren.
 
-> **Vereiste tools:** Docker Desktop (met Hyper-V), BcContainerHelper PowerShell module, developer license (.flf)
+### Pre-conditie check — verplicht vóór alles
+
+**Stel de gebruiker de volgende vragen voordat je verder gaat:**
+
+1. **Draait er al een container?**
+   - Ja → vraag de containernaam en sla Stap A over. Container aanmaken kost ~4 minuten en verwijdert een bestaande container.
+   - Nee → ga naar Stap A, maar zie punt 2 eerst.
+
+2. **Is er een developer licentie (.flf) beschikbaar?**
+   - Ja → vraag het volledige pad (bijv. `D:\repos\plants\license\BC14_DEV_NL.flf`)
+   - Nee → **stop hier**. Zonder developer licentie mislukt de import met fout `[18023703] File, Import, Text`. Een CRONUS demo licentie werkt NIET voor object-import.
+
+3. **Voor welke NAV/BC versie moet worden gecompileerd?**
+   - Controleer of die versie beschikbaar is als Docker artifact (zie versie-ondersteuning hieronder).
+
+Communiceer naar de gebruiker:
+> "Voor de Docker workflow heb ik nodig: (1) een draaiende container of toestemming om er een aan te maken, en (2) een developer licentiebestand (.flf). Zonder licentie kan ik geen objecten importeren."
 
 ### Stap A — Container aanmaken
 
