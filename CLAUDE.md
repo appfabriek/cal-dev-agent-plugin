@@ -47,6 +47,7 @@ Op basis van de taak, laad ook:
 |------|---------------|
 | Exporteren uit database | `cal-tools.md` |
 | Importeren / compileren | `cal-tools.md` |
+| Compile-problemen, tenant Failed, versie-mismatch | `cal-compile-troubleshooting.md` |
 | Git-beheer, diffs, merges | `cal-git-patterns.md` |
 | Migratie C/AL → AL | `cal-to-al-migration.md` |
 | Navision / zeer oude versies | `cal-classic-navision.md` |
@@ -69,19 +70,30 @@ Wanneer de gebruiker dit vraagt — lees `cal-tools.md` en handel direct:
 | "haal laatste code op" of "sync met database" | `/cal-pull` — Modified=Yes objecten exporteren |
 | "exporteer object X" of "haal codeunit Y op" | `Export-NAVApplicationObject` via NavAdminTool |
 | "wat zit er in de database?" | `Get-NAVApplicationObjectProperty` + export |
+| "maak aanpassing in X" / "voeg Y toe" / "wijzig Z" | `/cal-dev` — complete workflow incl. compile en test |
 | "importeer deze wijziging" | `Import-NAVApplicationObject` via NavAdminTool |
 | "wat zijn de verschillen met productie?" | Export beide → git diff |
-| "compileer object X" | Import met SynchronizeSchemaChanges |
+| "compileer object X" | `/cal-dev` of `Import-NAVApplicationObject` met NavServer params |
 | "welke versie van object X draait?" | `Get-NAVApplicationObjectProperty` |
+| "compile werkt niet" / "tenant Failed" / "503" | `cal-compile-troubleshooting.md` lezen |
 
 ## Development Workflow
 
-1. **Export eerst** — haal het object op uit de database vóór je wijzigingen maakt
-2. **Bewerk in tekst** — `.txt` formaat is diffbaar en trackbaar in git
-3. **Valideer syntax** — C/AL heeft strikte whitespace-regels in het exportformaat
-4. **Importeer en test** — compilatie vindt plaats bij import
-5. **Git commit** — één object per commit waar mogelijk
-6. **Deploy naar omgevingen** — in de juiste volgorde (afhankelijkheden eerst)
+1. **Pre-conditie check** — service Running? tenant Operational? Developer Services bereikbaar (niet 503)?
+2. **Export eerst** — haal het object op uit de **database** vóór je wijzigingen maakt (niet uit git)
+3. **Bewerk in tekst** — `.txt` formaat is diffbaar en trackbaar in git
+4. **Valideer syntax** — C/AL heeft strikte whitespace-regels in het exportformaat
+5. **Importeer MET NavServer params** — zonder NavServer wordt Object Metadata niet geschreven → object niet gecompileerd
+6. **Controleer Compiled=Yes** — exporteer het object opnieuw en check de status
+7. **Test via Invoke-NAVCodeunit** — altijd testen na compile
+8. **Git commit** — exporteer de definitieve versie uit DB, normaliseer datum/tijd, dan commit
+9. **Oplevering als .fob** — exporteer compiled object als .fob voor overdracht
+
+> **Kritieke valkuil:** `Import-NAVApplicationObject` zonder NavServer params importeert de broncode maar compileert NIET (Object Metadata wordt niet geschreven). Gebruik altijd `-NavServerName`, `-NavServerInstance`, `-NavServerManagementPort`.
+
+> **Kritieke valkuil:** `finsql.exe` met `usesyntheticmessages=yes` werkt NIET op Nederlandse BC. Gebruik altijd PowerShell cmdlets.
+
+Zie `cal-compile-troubleshooting.md` bij problemen.
 
 ## Objectnaamgeving in git
 
@@ -95,7 +107,7 @@ Voorbeelden:
 
 Object type afkortingen: `TAB` (Table), `COD` (Codeunit), `PAG` (Page), `REP` (Report), `XML` (XMLport), `QUE` (Query), `MEN` (MenuSuite), `DAT` (Dataport — oud)
 
-## Available Commands (7)
+## Available Commands (8)
 
 | Command | Purpose |
 |---------|---------|
@@ -103,6 +115,7 @@ Object type afkortingen: `TAB` (Table), `COD` (Codeunit), `PAG` (Page), `REP` (R
 | `/cal-pull` | Sync database → git: exporteer Modified=Yes objecten, toon diff |
 | `/cal-export` | Exporteer specifieke C/AL objecten uit de database naar tekst |
 | `/cal-import` | Importeer en compileer C/AL objecten in de database |
+| `/cal-dev` | **Complete dev workflow**: code ophalen, aanpassen, compileren, testen, opleveren als .fob |
 | `/cal-git` | Git-beheer voor C/AL: export-strategie, diffs, merges |
 | `/cal-review` | Review C/AL code op kwaliteit, patronen en valkuilen |
 | `/cal-deploy` | Deploy C/AL wijzigingen naar omgevingen via de runner |
