@@ -79,6 +79,8 @@ Wanneer de gebruiker dit vraagt — lees `cal-tools.md` en handel direct:
 
 ## Development Workflow
 
+### Scenario 1 — Bestaande omgeving
+
 1. **Pre-conditie check** — service Running? tenant Operational? Developer Services bereikbaar (niet 503)?
 2. **Export eerst** — haal het object op uit de **database** vóór je wijzigingen maakt (niet uit git)
 3. **Bewerk in tekst** — `.txt` formaat is diffbaar en trackbaar in git
@@ -89,9 +91,38 @@ Wanneer de gebruiker dit vraagt — lees `cal-tools.md` en handel direct:
 8. **Git commit** — exporteer de definitieve versie uit DB, normaliseer datum/tijd, dan commit
 9. **Oplevering als .fob** — exporteer compiled object als .fob voor overdracht
 
-> **Kritieke valkuil:** `Import-NAVApplicationObject` zonder NavServer params importeert de broncode maar compileert NIET (Object Metadata wordt niet geschreven). Gebruik altijd `-NavServerName`, `-NavServerInstance`, `-NavServerManagementPort`.
+### Scenario 2 — Docker container
 
-> **Kritieke valkuil:** `finsql.exe` met `usesyntheticmessages=yes` werkt NIET op Nederlandse BC. Gebruik altijd PowerShell cmdlets.
+Gebruik als er geen passende omgeving beschikbaar is. Zie `/cal-dev` skill voor volledige instructies.
+
+Snelle workflow:
+```powershell
+Import-Module BcContainerHelper
+$containerName = 'cal-dev-test-bc14'
+$artifactUrl = Get-BcArtifactUrl -type OnPrem -version '14' -country nl
+New-BcContainer -accept_eula -accept_outdated -containerName $containerName `
+    -artifactUrl $artifactUrl -auth NavUserPassword `
+    -credential (New-Object PSCredential('admin', (ConvertTo-SecureString 'P@ssw0rd1!' -AsPlainText -Force))) `
+    -isolation hyperv -memoryLimit '4G' -licenseFile 'D:\repos\plants\license\BC14_DEV_NL.flf'
+```
+
+**Beschikbare versies als Docker artifact:**
+- BC14 (14.x) — volledig getest ✓
+- BC13 (13.x) — getest ✓
+- NAV 2018 (11.x), NAV 2017 (10.x), NAV 2016 (9.x) — demo licentie verlopen, gebruik altijd `-licenseFile`
+- NAV 2013/R2 — NIET beschikbaar als Docker artifact
+
+**Kritieke valkuilen Docker:**
+- Gebruik ALTIJD `-licenseFile` bij aanmaken van de container (of vervang Cronus.flf achteraf)
+- `docker exec`/`docker cp` werkt NIET met Hyper-V isolatie — gebruik `Invoke-ScriptInBcContainer`
+- Import via finsql.exe ZONDER NavServer params (directe SQL), dan compile MET NavServer
+- Omgevingsvariabelen zijn leeg — laad via `. 'c:\run\ServiceSettings.ps1'`
+
+Zie `cal-compile-troubleshooting.md` (secties 12 en 13) voor Docker-specifieke problemen.
+
+> **Kritieke valkuil (algemeen):** `Import-NAVApplicationObject` zonder NavServer params importeert de broncode maar compileert NIET (Object Metadata wordt niet geschreven). Gebruik altijd `-NavServerName`, `-NavServerInstance`, `-NavServerManagementPort`.
+
+> **Kritieke valkuil (algemeen):** `finsql.exe` met `usesyntheticmessages=yes` werkt NIET op Nederlandse BC. Gebruik altijd PowerShell cmdlets (of directe finsql zonder dat flag).
 
 Zie `cal-compile-troubleshooting.md` bij problemen.
 

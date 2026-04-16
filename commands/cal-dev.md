@@ -291,13 +291,234 @@ Git: objects/COD50000 - MijnCodeunit.txt (commit abc1234)
 
 ---
 
+## Scenario 2 — Docker container omgeving
+
+Gebruik dit scenario als **er geen bestaande BC/NAV omgeving beschikbaar is** die overeenkomt met de doelversie, of als de bestaande omgeving te ver afwijkt om op te compileren.
+
+> **Vereiste tools:** Docker Desktop (met Hyper-V), BcContainerHelper PowerShell module, developer license (.flf)
+
+### Stap A — Container aanmaken
+
+```powershell
+Import-Module BcContainerHelper -WarningAction SilentlyContinue
+
+$containerName = 'cal-dev-test-bc14'
+$credential    = New-Object PSCredential('admin', (ConvertTo-SecureString 'P@ssw0rd1!' -AsPlainText -Force))
+$licFile       = 'D:\repos\plants\license\BC14_DEV_NL.flf'  # VEREIST - zie pitfalls
+
+# Bepaal artifact URL per versie:
+# BC14 CU53:  Get-BcArtifactUrl -type OnPrem -version '14.53' -country nl
+# BC14 latest: Get-BcArtifactUrl -type OnPrem -version '14' -country nl
+# BC13:        Get-BcArtifactUrl -type OnPrem -version '13' -country nl
+# NAV 2018:    Get-BcArtifactUrl -type OnPrem -version '11' -country nl
+# NAV 2017:    Get-BcArtifactUrl -type OnPrem -version '10' -country nl
+# NAV 2016:    Get-BcArtifactUrl -type OnPrem -version '9'  -country nl
+# NAV 2013/R2: NIET BESCHIKBAAR als Docker artifact
+
+$artifactUrl = Get-BcArtifactUrl -type OnPrem -version '14' -country nl
+Write-Host "Artifact: $artifactUrl"
+
+New-BcContainer `
+    -accept_eula `
+    -accept_outdated `
+    -containerName  $containerName `
+    -artifactUrl    $artifactUrl `
+    -auth           NavUserPassword `
+    -credential     $credential `
+    -updateHosts `
+    -memoryLimit    '4G' `
+    -isolation      hyperv `
+    -licenseFile    '' `
+    -enableTaskScheduler:$false
+```
+
+**Container naam max 15 tekens** (BcContainerHelper geeft waarschuwing bij overschrijding).
+
+### Stap B — License vervangen (VERPLICHT)
+
+BcContainerHelper containers gebruiken standaard de CRONUS demo licentie (7 KB). Deze licentie **ontbreekt "File, Import, Text" systeem-permissie** — import van objecten mislukt met fout `[18023703]`.
+
+```powershell
+# Vervang CRONUS demo licentie door echte developer licentie
+$licContent = [System.IO.File]::ReadAllBytes($licFile)
+
+Invoke-ScriptInBcContainer -containerName $containerName -scriptblock {
+    param($licBytes)
+
+    . 'c:\run\ServiceSettings.ps1'
+
+    # Zoek en vervang Cronus.flf (versie-onafhankelijk pad)
+    $cronusFlf = Get-ChildItem 'C:\Program Files\Microsoft Dynamics NAV' -Recurse -Filter 'Cronus.flf' -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty FullName
+    if (-not $cronusFlf) {
+        $cronusFlf = Get-ChildItem 'C:\Program Files\Microsoft Dynamics 365 Business Central' -Recurse -Filter 'Cronus.flf' -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+    }
+
+    [System.IO.File]::WriteAllBytes($cronusFlf, $licBytes)
+    Write-Host "Licentie vervangen: $cronusFlf ($($licBytes.Length) bytes)"
+
+    # Herstart service
+    Restart-Service "MicrosoftDynamicsNavServer`$$ServerInstance" -Force
+    Start-Sleep -Seconds 10
+    Write-Host "Service: $((Get-Service "MicrosoftDynamicsNavServer`$$ServerInstance").Status)"
+
+} -argumentList (,$licContent)
+```
+
+> **Belangrijk:** `Import-NAVServerLicense` werkt NIET voor containers — het schrijft naar de database maar de service laadt nog steeds Cronus.flf van disk. Vervang het bestand op disk en herstart.
+
+### Stap C — Rechten instellen
+
+```powershell
+Invoke-ScriptInBcContainer -containerName $containerName -scriptblock {
+    . 'c:\run\ServiceSettings.ps1'
+    $dll = Get-ChildItem 'C:\Program Files\Microsoft Dynamics NAV','C:\Program Files\Microsoft Dynamics 365 Business Central' -Recurse -Filter 'Microsoft.Dynamics.Nav.Management.dll' -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty FullName
+    Import-Module $dll -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
+
+    $company = (Get-NAVCompany -ServerInstance $ServerInstance | Select-Object -First 1).CompanyName
+    $me = 'user manager\containeradministrator'
+
+    try {
+        New-NAVServerUser -ServerInstance $ServerInstance -WindowsAccount $me -LicenseType Full -ErrorAction Stop
+        New-NAVServerUserPermissionSet -ServerInstance $ServerInstance -WindowsAccount $me -PermissionSetId 'SUPER' -CompanyName $company
+        Write-Host "SUPER rechten: OK voor $me"
+    } catch {
+        Write-Host "Rechten: $($_.Exception.Message)"  # kan falen als user al bestaat
+    }
+}
+```
+
+> **Licentielimiet:** CRONUS demo licentie staat 2 full users toe (ADMIN + 1 extra). Voeg nooit meer dan 1 extra Windows user toe.
+
+### Stap D — Objecten importeren (finsql.exe direct)
+
+In containers gebruik je `Import-NAVApplicationObject` **via Invoke-ScriptInBcContainer**. Dit roept intern finsql.exe aan.
+
+**Kritiek:** Gebruik finsql.exe ZONDER NavServer parameters voor de import, dan `Compile-NAVApplicationObject` MET NavServer voor compilatie.
+
+```powershell
+Invoke-ScriptInBcContainer -containerName $containerName -scriptblock {
+    param($objectStr)
+
+    . 'c:\run\ServiceSettings.ps1'
+    $dll = Get-ChildItem 'C:\Program Files\Microsoft Dynamics NAV','C:\Program Files\Microsoft Dynamics 365 Business Central' -Recurse -Filter 'Microsoft.Dynamics.Nav.Management.dll' -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty FullName
+    Import-Module $dll -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
+
+    $finsql = Get-ChildItem 'C:\Program Files (x86)\Microsoft Dynamics NAV','C:\Program Files (x86)\Microsoft Dynamics 365 Business Central' -Recurse -Filter 'finsql.exe' -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty FullName
+
+    $configPath = Get-ChildItem 'C:\Program Files\Microsoft Dynamics NAV','C:\Program Files\Microsoft Dynamics 365 Business Central' -Recurse -Filter 'CustomSettings.config' -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty FullName
+    $raw   = Get-Content $configPath -Raw
+    $db    = if ($raw -match 'key="DatabaseName"\s+value="([^"]*)"') { $Matches[1] } else { 'CRONUS' }
+    $port  = if ($raw -match 'key="ManagementServicesPort"\s+value="([^"]*)"') { [int]$Matches[1] } else { 7045 }
+    $dbSrv = 'localhost\SQLEXPRESS'
+
+    New-Item -ItemType Directory -Path 'C:\temp' -Force | Out-Null
+    $objPath = 'C:\temp\import-object.txt'
+    $logPath = 'C:\temp\finsql-import.log'
+
+    # Gebruik Windows-1252 encoding (finsql.exe verwacht dit)
+    $enc = [System.Text.Encoding]::GetEncoding(1252)
+    [System.IO.File]::WriteAllText($objPath, $objectStr, $enc)
+    if (Test-Path $logPath) { Remove-Item $logPath -Force }
+
+    # Import: finsql.exe ZONDER NavServer params (directe SQL write)
+    $proc = Start-Process -FilePath $finsql `
+        -ArgumentList "command=importobjects,file=`"$objPath`",logfile=`"$logPath`",servername=`"$dbSrv`",database=`"$db`",ntauthentication=yes" `
+        -Wait -PassThru -NoNewWindow
+    Write-Host "finsql import exit: $($proc.ExitCode)"
+    if ((Test-Path $logPath) -and (Get-Item $logPath).Length -gt 0) {
+        Write-Host "Log: $(Get-Content $logPath)"  # gevuld = FOUT
+    }
+
+    # Compileer MET NavServer (schema sync + Object Metadata schrijven)
+    Compile-NAVApplicationObject `
+        -DatabaseServer           $dbSrv `
+        -DatabaseName             $db `
+        -Filter                   'Type=Table;ID=50099'  `  # pas filter aan
+        -NavServerName            'localhost' `
+        -NavServerInstance        $ServerInstance `
+        -NavServerManagementPort  $port `
+        -SynchronizeSchemaChanges Force `
+        -Recompile
+
+    # Verificeer
+    $r = Invoke-Sqlcmd -ServerInstance $dbSrv -Database $db `
+        -Query "SELECT [Type], [ID], [Name], [Compiled] FROM [Object] WHERE [ID] = 50099"
+    $r | ForEach-Object { Write-Host "  Type=$($_.Type) ID=$($_.ID) Compiled=$($_.Compiled)" }
+
+} -argumentList $objectStr
+```
+
+### Stap E — Testen via Invoke-NAVCodeunit
+
+```powershell
+Invoke-ScriptInBcContainer -containerName $containerName -scriptblock {
+    . 'c:\run\ServiceSettings.ps1'
+    $dll = Get-ChildItem 'C:\Program Files\Microsoft Dynamics NAV','C:\Program Files\Microsoft Dynamics 365 Business Central' -Recurse -Filter 'Microsoft.Dynamics.Nav.Management.dll' -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty FullName
+    Import-Module $dll -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
+
+    $company = (Get-NAVCompany -ServerInstance $ServerInstance | Select-Object -First 1).CompanyName
+    Write-Host "Company: $company"
+
+    try {
+        Invoke-NAVCodeunit -ServerInstance $ServerInstance -CompanyName $company -CodeunitId 50099
+        Write-Host "TEST GESLAAGD!"
+    } catch {
+        Write-Host "Fout: $($_.Exception.Message)"
+    }
+}
+```
+
+### Container versie-specifieke paden
+
+Gebruik altijd `Get-ChildItem -Recurse` om paden te zoeken (versie-onafhankelijk):
+
+| Versie | NAV versienummer | Service base pad |
+|--------|-----------------|-----------------|
+| BC14 | 14.x | `C:\Program Files\Microsoft Dynamics NAV\140\Service\` |
+| BC13 | 13.x | `C:\Program Files\Microsoft Dynamics 365 Business Central\130\Service\` |
+| NAV 2018 (v11) | 11.x | `C:\Program Files\Microsoft Dynamics NAV\110\Service\` |
+| NAV 2017 (v10) | 10.x | `C:\Program Files\Microsoft Dynamics NAV\100\Service\` |
+| NAV 2016 (v9) | 9.x | `C:\Program Files\Microsoft Dynamics NAV\90\Service\` |
+
+### Docker Container Pitfalls
+
+1. **`docker exec` / `docker cp` werkt niet** — Hyper-V isolatie blokkeert dit. Gebruik altijd `Invoke-ScriptInBcContainer` en `Copy-FileToNavContainer`.
+
+2. **CRONUS demo licentie blokkeert import** — Fout `[18023703] File, Import, Text`. Vervang `Cronus.flf` op disk en herstart de service.
+
+3. **`Import-NAVServerLicense` werkt niet voor containers** — Schrijft naar DB maar service laadt nog steeds licentie van disk. Vervang het bestand direct.
+
+4. **Omgevingsvariabelen leeg in container** — `$env:navservicename`, `$env:navdatabasename` etc. zijn leeg. Gebruik in plaats daarvan `. 'c:\run\ServiceSettings.ps1'` om `$ServerInstance`, `$NavServiceName` etc. te laden.
+
+5. **finsql.exe hangt bij direct aanroep met `usesyntheticmessages=yes`** — Gebruik GEEN `usesyntheticmessages=yes` op NL containers. Roep finsql.exe aan zonder dit flag; als het hangt, check of de import al geslaagd was.
+
+6. **`Import-NAVApplicationObject` met NavServer faalt** met `[18023703]` ook na licentie-fix — Dit is een timing issue. Na het vervangen van Cronus.flf de service herstarten en 10 seconden wachten voor het import-commando.
+
+7. **`Import-NAVApplicationObject` meldt "OK" maar schrijft niets** — De navcommandresult.txt bevat dan `[0] The command completed successfully in '0' seconds` maar de SQL Object tabel is leeg. Oorzaak: finsql.exe connecteert via NavServer die de schema sync uitvoert maar de transaction rollback-t bij fout. Oplossing: gebruik directe finsql.exe aanroep ZONDER NavServer params.
+
+8. **Licentielimiet: max 2 full users** — CRONUS demo licentie staat 2 gebruikers toe. ADMIN (default) + 1 extra. Voeg nooit `NT AUTHORITY\SYSTEM` toe als je ook `containeradministrator` nodig hebt.
+
+9. **Object Type nummers** — In de SQL Object tabel: Type 0=Table, Type 5=Codeunit (niet Type 4 zoals je verwacht). Controleer altijd met `SELECT [Type], [Name] FROM [Object] WHERE [Name]='bekende naam'` om de lokale type-mapping te verifiëren.
+
+10. **Container naam max 15 tekens** — BcContainerHelper geeft waarschuwing maar maakt de container wel aan. Houd namen kort.
+
+---
+
 ## Regels
 
 - Gebruik **altijd** NavServer params bij `Import-NAVApplicationObject` voor compile — zonder NavServer wordt Object Metadata niet geschreven
+- In **Docker containers**: gebruik finsql.exe direct (ZONDER NavServer) voor import, dan `Compile-NAVApplicationObject` MET NavServer voor schema sync + Object Metadata
 - **Nooit** `finsql.exe` met `usesyntheticmessages=yes` op Nederlandse BC — dit faalt met taalkwestie ("yes" niet geldig, verwacht "Ja/Nee")
-- **Altijd** database naam ophalen via `Get-NAVServerConfiguration`, nooit hardcoden
+- **Altijd** database naam ophalen via `Get-NAVServerConfiguration` of CustomSettings.config, nooit hardcoden
 - Bij twijfel over SyncMode: gebruik `Force` in plaats van `Yes` — veiliger, maar check op dataverlies
-- Compileer **altijd** via NavServer (Management port 7345), niet direct SQL
+- Compileer **altijd** via NavServer (Management port), niet direct SQL
 - Test **altijd** via `Invoke-NAVCodeunit` of event log na import
 - Sla de compiled versie op in git (na export uit DB), niet het handmatig bewerkte bestand
 - Bij compilatieproblemen: zie `cal-compile-troubleshooting.md` — loop er niet blind doorheen

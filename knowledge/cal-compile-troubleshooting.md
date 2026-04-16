@@ -309,6 +309,83 @@ Write-Host "Bedrijf: $company"
 
 ---
 
+---
+
+## 12. Docker container — CRONUS licentie blokkeert import
+
+**Symptoom:** `Import-NAVApplicationObject` of `Import-ObjectsToNavContainer` geeft:
+```
+[18023703] You do not have permission to run the 'File, Import, Text' System.
+```
+of `navcommandresult.txt` bevat fout maar PowerShell cmdlet rapporteert toch "OK" (non-terminating error) — objecten staan NIET in SQL.
+
+**Oorzaak:** BcContainerHelper containers gebruiken de CRONUS demo licentie (`Cronus.flf`, ~7 KB). Deze licentie mist de "File, Import, Text" systeem-permissie die nodig is voor object import. `Import-NAVServerLicense` schrijft wel naar de DB maar de service laadt nog steeds de .flf van disk.
+
+**Oplossing:**
+```powershell
+$licBytes = [System.IO.File]::ReadAllBytes('D:\repos\plants\license\BC14_DEV_NL.flf')
+
+Invoke-ScriptInBcContainer -containerName $containerName -scriptblock {
+    param($bytes)
+    . 'c:\run\ServiceSettings.ps1'
+    $cronusFlf = Get-ChildItem 'C:\Program Files\Microsoft Dynamics NAV' -Recurse -Filter 'Cronus.flf' -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty FullName
+    [System.IO.File]::WriteAllBytes($cronusFlf, $bytes)
+    Write-Host "Licentie vervangen: $cronusFlf"
+    Restart-Service "MicrosoftDynamicsNavServer`$$ServerInstance" -Force
+    Start-Sleep -Seconds 10
+} -argumentList (,$licBytes)
+```
+
+**Verificatie:** Een correct werkende import logt `navcommandresult.txt` met: `[0] The command completed successfully in '0' seconds` EN de objecten zijn direct zichtbaar in SQL.
+
+---
+
+## 13. Docker container — `Import-NAVApplicationObject` meldt "OK" maar schrijft niets
+
+**Symptoom:** Import zegt "GESLAAGD" of geen fout, maar SQL `SELECT FROM [Object] WHERE [ID]=50099` geeft niets.
+
+**Oorzaak:** `Import-NAVApplicationObject` met NavServer params roept finsql.exe aan met `SynchronizeSchemaChanges=Force`. Als de NavServer de schema sync uitvoert maar een probleem tegenkomt, rollback-t finsql.exe de hele transactie zonder foutmelding aan de cmdlet terug te geven.
+
+**Oplossing — gebruik twee stappen:**
+1. Import via finsql.exe ZONDER NavServer params (directe SQL write, geen schema sync)
+2. Compileer via `Compile-NAVApplicationObject` MET NavServer (schema sync + Object Metadata)
+
+```powershell
+Invoke-ScriptInBcContainer -containerName $containerName -scriptblock {
+    param($objectStr)
+    . 'c:\run\ServiceSettings.ps1'
+    $finsql = Get-ChildItem 'C:\Program Files (x86)\Microsoft Dynamics NAV' -Recurse -Filter 'finsql.exe' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+    $cfg    = Get-ChildItem 'C:\Program Files\Microsoft Dynamics NAV' -Recurse -Filter 'CustomSettings.config' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+    $raw    = Get-Content $cfg -Raw
+    $db     = if ($raw -match 'key="DatabaseName"\s+value="([^"]*)"') { $Matches[1] } else { 'CRONUS' }
+    $port   = if ($raw -match 'key="ManagementServicesPort"\s+value="([^"]*)"') { [int]$Matches[1] } else { 7045 }
+
+    $enc  = [System.Text.Encoding]::GetEncoding(1252)
+    $path = 'C:\temp\import.txt'
+    [System.IO.File]::WriteAllText($path, $objectStr, $enc)
+
+    # Stap 1: import via finsql.exe ZONDER NavServer
+    $logPath = 'C:\temp\import.log'
+    Start-Process -FilePath $finsql `
+        -ArgumentList "command=importobjects,file=`"$path`",logfile=`"$logPath`",servername=`"localhost\SQLEXPRESS`",database=`"$db`",ntauthentication=yes" `
+        -Wait -PassThru -NoNewWindow | Out-Null
+    if ((Test-Path $logPath) -and (Get-Item $logPath).Length -gt 0) {
+        Write-Error "finsql import fout: $(Get-Content $logPath)"
+    }
+
+    # Stap 2: compile MET NavServer
+    $mgmtDll = Get-ChildItem 'C:\Program Files\Microsoft Dynamics NAV' -Recurse -Filter 'Microsoft.Dynamics.Nav.Management.dll' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+    Import-Module $mgmtDll -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
+    Compile-NAVApplicationObject -DatabaseServer 'localhost\SQLEXPRESS' -DatabaseName $db `
+        -Filter 'Type=Table;ID=50099' `
+        -NavServerName 'localhost' -NavServerInstance $ServerInstance -NavServerManagementPort $port `
+        -SynchronizeSchemaChanges Force -Recompile
+} -argumentList $objectStr
+```
+
+---
+
 ## Snel diagnose script
 
 Plak dit als je niet weet wat er mis is:
